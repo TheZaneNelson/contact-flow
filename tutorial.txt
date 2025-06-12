@@ -1,0 +1,40 @@
+Welcome to Contact Flow!
+
+== Quick Start Guide ==
+
+1. Installation:
+   - Open your terminal in the project's root directory.
+   - Run `npm install` to install all the required packages and dependencies.
+
+2. Running the Application:
+   - After the installation is complete, run `npm run dev`.
+   - The application will start on port 1570. You can access it at http://localhost:1570 in your web browser.
+
+== How to Use Contact Flow ==
+
+1. Create a New Flow:
+   - On the main screen, fill in the "Flow Name" and set a "Duration" for your contact collection session.
+   - You can also configure optional settings to enhance your session:
+     - **Contact Name Prefix**: Adds a specific prefix (e.g., "Event24_") to the beginning of every contact's name.
+     - **WhatsApp Group Link**: Displays a prominent, glowing link on the contact form for users to join your WhatsApp group.
+     - **Session Password**: Secures your session. Users will need to enter this password before they can add their contact information.
+   - Click the "Launch Flow" button.
+
+2. Share Your Session:
+   - After creation, you'll be directed to the session dashboard.
+   - Click the "Copy Link" button to copy the unique URL for your session to your clipboard.
+   - Share this link with anyone from whom you want to collect contact information.
+
+3. Collect Contacts:
+   - When someone opens your shared link, they will see a form to enter their details (Name, Phone Number, etc.).
+   - If you set a password, they will be prompted to enter it before they can access the form.
+   - The system automatically prevents duplicate entries based on the phone number to ensure your list is clean.
+
+4. Manage and Download Contacts:
+   - From your session dashboard, you can monitor the number of contacts collected in real-time.
+   - Once your session expires, or at any point during the session, you can download the collected contacts.
+   - You have two convenient download options:
+     - **Download VCF**: A standard vCard file format that can be easily imported into the contacts app on any mobile device (iOS or Android).
+     - **Download CSV**: A comma-separated values file, perfect for opening in spreadsheet programs like Microsoft Excel, Google Sheets, or Apple Numbers.
+
+Thank you for using Contact Flow! We hope you enjoy the seamless experience.
