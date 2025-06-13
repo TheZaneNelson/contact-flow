@@ -1,54 +1,73 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
-import { Copy, Download, Users, Clock, Share2, FileText, Database, Tag, Link as LinkIcon, Lock, ArrowLeft } from 'lucide-react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Copy, Download, Users, Clock, Share2, FileText, Database, Tag, Link as LinkIcon, Lock, ArrowLeft, RefreshCw } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
+import { supabase } from '@/lib/supabaseClient';
 
-const SessionDashboard = ({ session, onBack }) => {
+const SessionDashboard = ({ session, onBack, user }) => {
   const [timeRemaining, setTimeRemaining] = useState('');
   const [contacts, setContacts] = useState([]);
   const [isExpired, setIsExpired] = useState(false);
+  const [isLoadingContacts, setIsLoadingContacts] = useState(false);
+
+  const calculateTimeRemaining = useCallback(() => {
+    const now = Date.now();
+    const expiresAtDate = new Date(session.expires_at).getTime();
+    const remaining = expiresAtDate - now;
+    
+    if (remaining <= 0) {
+      setIsExpired(true);
+      setTimeRemaining('Expired');
+      return;
+    }
+
+    const hours = Math.floor(remaining / (1000 * 60 * 60));
+    const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
+    const seconds = Math.floor((remaining % (1000 * 60)) / 1000);
+    
+    setTimeRemaining(`${hours}h ${minutes}m ${seconds}s`);
+  }, [session.expires_at]);
 
   useEffect(() => {
-    const updateTimer = () => {
-      const now = Date.now();
-      const remaining = session.expiresAt - now;
-      
-      if (remaining <= 0) {
-        setIsExpired(true);
-        setTimeRemaining('Expired');
-        if(session.sessionPassword && session.sessionPassword.length > 0){
-           localStorage.removeItem(`session_auth_${session.id}`);
-        }
-        return;
-      }
-
-      const hours = Math.floor(remaining / (1000 * 60 * 60));
-      const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
-      const seconds = Math.floor((remaining % (1000 * 60)) / 1000);
-      
-      setTimeRemaining(`${hours}h ${minutes}m ${seconds}s`);
-    };
-
-    updateTimer();
-    const interval = setInterval(updateTimer, 1000);
+    calculateTimeRemaining();
+    const interval = setInterval(calculateTimeRemaining, 1000);
     return () => clearInterval(interval);
-  }, [session.expiresAt, session.id, session.sessionPassword]);
+  }, [calculateTimeRemaining]);
+
+  const fetchContacts = useCallback(async () => {
+    if (!session?.id) return;
+    setIsLoadingContacts(true);
+    const { data, error } = await supabase
+      .from('contacts')
+      .select('*')
+      .eq('session_id', session.id)
+      .order('submitted_at', { ascending: false });
+
+    if (error) {
+      toast({ title: "Error fetching contacts", description: error.message, variant: "destructive" });
+    } else {
+      setContacts(data || []);
+    }
+    setIsLoadingContacts(false);
+  }, [session?.id]);
 
   useEffect(() => {
-    const loadContacts = () => {
-      const sessionData = localStorage.getItem(`session_${session.id}`);
-      if (sessionData) {
-        const parsed = JSON.parse(sessionData);
-        setContacts(parsed.contacts || []);
-      }
+    fetchContacts();
+    const contactsSubscription = supabase
+      .channel(`contacts-session-${session.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'contacts', filter: `session_id=eq.${session.id}` }, payload => {
+        console.log('Contact change received!', payload);
+        fetchContacts();
+      })
+      .subscribe();
+    
+    return () => {
+      supabase.removeChannel(contactsSubscription);
     };
 
-    loadContacts();
-    const interval = setInterval(loadContacts, 2000); // Refresh contacts list every 2 seconds
-    return () => clearInterval(interval);
-  }, [session.id]);
+  }, [session.id, fetchContacts]);
 
   const copySessionLink = () => {
     const link = `${window.location.origin}?session=${session.id}`;
@@ -61,25 +80,18 @@ const SessionDashboard = ({ session, onBack }) => {
 
   const downloadVCF = () => {
     if (contacts.length === 0) {
-      toast({
-        title: "No Contacts",
-        description: "No contacts available to download",
-        variant: "destructive"
-      });
+      toast({ title: "No Contacts", description: "No contacts available to download", variant: "destructive" });
       return;
     }
-
     let vcfContent = '';
     contacts.forEach(contact => {
-      vcfContent += 'BEGIN:VCARD\n';
-      vcfContent += 'VERSION:3.0\n';
+      vcfContent += 'BEGIN:VCARD\nVERSION:3.0\n';
       vcfContent += `FN:${contact.name}\n`;
-      vcfContent += `TEL:${contact.phone}\n`;
-      vcfContent += `EMAIL:${contact.email}\n`;
+      if (contact.phone) vcfContent += `TEL:${contact.phone}\n`;
+      if (contact.email) vcfContent += `EMAIL:${contact.email}\n`;
       if (contact.company) vcfContent += `ORG:${contact.company}\n`;
       vcfContent += 'END:VCARD\n\n';
     });
-
     const blob = new Blob([vcfContent], { type: 'text/vcard' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -87,34 +99,24 @@ const SessionDashboard = ({ session, onBack }) => {
     a.download = `${session.name}_contacts.vcf`;
     a.click();
     URL.revokeObjectURL(url);
-
-    toast({
-      title: "VCF Downloaded! 📱",
-      description: "Contact file has been downloaded"
-    });
+    toast({ title: "VCF Downloaded! 📱", description: "Contact file has been downloaded" });
   };
 
   const downloadCSV = () => {
     if (contacts.length === 0) {
-      toast({
-        title: "No Contacts",
-        description: "No contacts available to download",
-        variant: "destructive"
-      });
+      toast({ title: "No Contacts", description: "No contacts available to download", variant: "destructive" });
       return;
     }
-
-    const headers = ['Name', 'Email', 'Phone', 'Company'];
+    const headers = ['Name', 'Phone', 'Email', 'Company'];
     const csvContent = [
       headers.join(','),
       ...contacts.map(contact => [
         contact.name,
-        contact.email,
-        contact.phone,
+        contact.phone || '',
+        contact.email || '',
         contact.company || ''
-      ].map(field => `"${String(field).replace(/"/g, '""')}"`).join(',')) // Handle quotes in fields
+      ].map(field => `"${String(field).replace(/"/g, '""')}"`).join(','))
     ].join('\n');
-
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -122,11 +124,7 @@ const SessionDashboard = ({ session, onBack }) => {
     a.download = `${session.name}_contacts.csv`;
     a.click();
     URL.revokeObjectURL(url);
-
-    toast({
-      title: "CSV Downloaded! 📊",
-      description: "Contact spreadsheet has been downloaded"
-    });
+    toast({ title: "CSV Downloaded! 📊", description: "Contact spreadsheet has been downloaded" });
   };
 
   return (
@@ -205,17 +203,17 @@ const SessionDashboard = ({ session, onBack }) => {
             </div>
           </div>
           
-          {(session.contactNamePrefix || session.whatsAppLink || session.sessionPassword) && (
+          {(session.contact_name_prefix || session.whatsapp_link || session.session_password) && (
             <div className="mb-6 p-4 bg-white/5 rounded-lg border border-white/10">
               <h4 className="text-md font-semibold text-purple-300 mb-3">Session Settings:</h4>
               <ul className="space-y-2 text-sm text-gray-300">
-                {session.contactNamePrefix && (
-                  <li className="flex items-center"><Tag className="w-4 h-4 mr-2 text-purple-400" />Name Prefix: <span className="ml-1 font-mono bg-white/10 px-1 rounded">{session.contactNamePrefix}</span></li>
+                {session.contact_name_prefix && (
+                  <li className="flex items-center"><Tag className="w-4 h-4 mr-2 text-purple-400" />Name Prefix: <span className="ml-1 font-mono bg-white/10 px-1 rounded">{session.contact_name_prefix}</span></li>
                 )}
-                {session.whatsAppLink && (
-                  <li className="flex items-center"><LinkIcon className="w-4 h-4 mr-2 text-purple-400" />WhatsApp Link: <a href={session.whatsAppLink} target="_blank" rel="noopener noreferrer" className="ml-1 text-blue-400 hover:underline truncate max-w-xs inline-block">{session.whatsAppLink}</a></li>
+                {session.whatsapp_link && (
+                  <li className="flex items-center"><LinkIcon className="w-4 h-4 mr-2 text-purple-400" />WhatsApp Link: <a href={session.whatsapp_link} target="_blank" rel="noopener noreferrer" className="ml-1 text-blue-400 hover:underline truncate max-w-xs inline-block">{session.whatsapp_link}</a></li>
                 )}
-                {session.sessionPassword && (
+                {session.session_password && (
                   <li className="flex items-center"><Lock className="w-4 h-4 mr-2 text-purple-400" />Password Protected: <span className="ml-1 font-bold text-green-400">Yes</span></li>
                 )}
               </ul>
@@ -229,12 +227,12 @@ const SessionDashboard = ({ session, onBack }) => {
         <Card className="glass-effect border-purple-500/30">
           <CardHeader>
             <CardTitle className="text-xl text-purple-300">Download Options</CardTitle>
-            <CardDescription className="text-gray-400">Export collected contacts when session ends or anytime.</CardDescription>
+            <CardDescription className="text-gray-400">Export collected contacts.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <Button
               onClick={downloadVCF}
-              disabled={contacts.length === 0 && !isExpired}
+              disabled={contacts.length === 0}
               className="w-full bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/30 disabled:opacity-60"
               variant="outline"
             >
@@ -243,37 +241,43 @@ const SessionDashboard = ({ session, onBack }) => {
             </Button>
             <Button
               onClick={downloadCSV}
-              disabled={contacts.length === 0 && !isExpired}
+              disabled={contacts.length === 0}
               className="w-full bg-green-600/20 hover:bg-green-600/30 text-green-300 border border-green-500/30 disabled:opacity-60"
               variant="outline"
             >
               <Database className="w-4 h-4 mr-2" />
               Download CSV
             </Button>
-            <p className="text-xs text-gray-500 text-center">Downloads enabled when session expires or if contacts are present.</p>
           </CardContent>
         </Card>
 
         <Card className="glass-effect border-purple-500/30">
-          <CardHeader>
-            <CardTitle className="text-xl text-purple-300">Recent Contacts</CardTitle>
-            <CardDescription className="text-gray-400">A quick view of the latest submissions.</CardDescription>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle className="text-xl text-purple-300">Recent Contacts</CardTitle>
+              <CardDescription className="text-gray-400">A quick view of the latest submissions.</CardDescription>
+            </div>
+            <Button onClick={fetchContacts} variant="ghost" size="sm" className="text-purple-400 hover:text-purple-300 hover:bg-purple-500/10" disabled={isLoadingContacts}>
+              <RefreshCw className={`w-4 h-4 ${isLoadingContacts ? 'animate-spin' : ''}`} />
+            </Button>
           </CardHeader>
           <CardContent>
-            {contacts.length === 0 ? (
+            {isLoadingContacts && contacts.length === 0 ? (
+              <p className="text-gray-400 text-center py-4">Loading contacts...</p>
+            ) : contacts.length === 0 ? (
               <p className="text-gray-400 text-center py-4">No contacts submitted yet.</p>
             ) : (
               <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
-                {contacts.slice(-5).reverse().map((contact, index) => (
+                {contacts.map((contact, index) => (
                   <motion.div
-                    key={index}
+                    key={contact.id || index}
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: index * 0.1 }}
+                    transition={{ delay: index * 0.05 }}
                     className="p-3 bg-white/5 rounded-md border border-white/10"
                   >
                     <p className="font-medium text-white">{contact.name}</p>
-                    <p className="text-sm text-gray-400">{contact.email}</p>
+                    <p className="text-sm text-gray-400">{contact.email || 'No email'}</p>
                     <p className="text-xs text-gray-500">{contact.phone}</p>
                   </motion.div>
                 ))}

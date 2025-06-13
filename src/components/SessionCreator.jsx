@@ -5,10 +5,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Clock, Users, Share2, Sparkles, Tag, Link as LinkIcon, Lock } from 'lucide-react';
+import { Clock, Users, Share2, Sparkles, Tag, Link as LinkIcon, Lock, Settings } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
+import { supabase } from '@/lib/supabaseClient';
+import { v4 as uuidv4 } from 'uuid';
 
-const SessionCreator = ({ onSessionCreated }) => {
+const SessionCreator = ({ onSessionCreated, user, onManageGlobalContacts }) => {
   const [sessionName, setSessionName] = useState('');
   const [duration, setDuration] = useState('');
   const [durationUnit, setDurationUnit] = useState('minutes');
@@ -17,7 +19,16 @@ const SessionCreator = ({ onSessionCreated }) => {
   const [sessionPassword, setSessionPassword] = useState('');
   const [isCreating, setIsCreating] = useState(false);
 
-  const handleCreateSession = () => {
+  const handleCreateSession = async () => {
+    if (!user) {
+      toast({
+        title: "Authentication Required",
+        description: "Please log in to create a session.",
+        variant: "destructive"
+      });
+      return;
+    }
+
     if (!sessionName.trim() || !duration) {
       toast({
         title: "Missing Information",
@@ -30,30 +41,78 @@ const SessionCreator = ({ onSessionCreated }) => {
     setIsCreating(true);
     
     const durationMs = parseInt(duration) * (durationUnit === 'minutes' ? 60000 : 3600000);
-    const sessionId = Math.random().toString(36).substring(2, 15);
+    const sessionId = uuidv4();
+    const createdAt = new Date().toISOString();
+    const expiresAt = new Date(Date.now() + durationMs).toISOString();
     
+    let globalContactsToAdd = [];
+    const { data: fetchedGlobalContacts, error: fetchGlobalError } = await supabase
+      .from('global_contacts')
+      .select('*');
+
+    if (fetchGlobalError) {
+      console.warn("Could not fetch global contacts:", fetchGlobalError.message);
+      toast({ title: "Global Contacts Warning", description: "Could not fetch global contacts to add to session.", variant: "default" });
+    } else {
+      globalContactsToAdd = fetchedGlobalContacts || [];
+    }
+
+
     const sessionData = {
       id: sessionId,
       name: sessionName,
-      duration: durationMs,
-      createdAt: Date.now(),
-      expiresAt: Date.now() + durationMs,
-      contactNamePrefix: contactNamePrefix.trim(),
-      whatsAppLink: whatsAppLink.trim(),
-      sessionPassword: sessionPassword.trim(),
-      contacts: []
+      duration_ms: durationMs,
+      created_at: createdAt,
+      expires_at: expiresAt,
+      contact_name_prefix: contactNamePrefix.trim() || null,
+      whatsapp_link: whatsAppLink.trim() || null,
+      session_password: sessionPassword.trim() || null,
+      user_id: user.id
     };
 
-    localStorage.setItem(`session_${sessionId}`, JSON.stringify(sessionData));
+    const { data: newSession, error: sessionError } = await supabase
+      .from('sessions')
+      .insert([sessionData])
+      .select()
+      .single();
 
-    setTimeout(() => {
+    if (sessionError) {
       setIsCreating(false);
-      onSessionCreated(sessionData);
       toast({
-        title: "Session Created! 🎉",
-        description: "Your contact collection session is ready to share!"
+        title: "Session Creation Failed",
+        description: sessionError.message,
+        variant: "destructive"
       });
-    }, 1500);
+      return;
+    }
+    
+    if (globalContactsToAdd.length > 0) {
+        const contactsToInsert = globalContactsToAdd.map(gc => ({
+            session_id: newSession.id,
+            name: gc.name,
+            phone: gc.phone,
+            email: gc.email || null,
+            company: gc.company || null,
+            submitted_at: new Date().toISOString()
+        }));
+
+        const { error: contactsError } = await supabase
+            .from('contacts')
+            .insert(contactsToInsert);
+
+        if (contactsError) {
+            console.warn("Error adding global contacts to session:", contactsError.message);
+            toast({ title: "Global Contacts Warning", description: "Could not add all global contacts to this session.", variant: "default" });
+        }
+    }
+
+
+    setIsCreating(false);
+    onSessionCreated(newSession);
+    toast({
+      title: "Session Created! 🎉",
+      description: "Your contact collection session is ready to share!"
+    });
   };
 
   return (
@@ -65,11 +124,16 @@ const SessionCreator = ({ onSessionCreated }) => {
     >
       <Card className="glass-effect neon-glow border-purple-500/30">
         <CardHeader className="text-center">
+           <div className="flex justify-end w-full">
+            <Button onClick={onManageGlobalContacts} variant="outline" size="sm" className="border-cyan-400/30 text-cyan-300 hover:bg-cyan-500/20">
+              <Settings className="w-4 h-4 mr-2" /> Manage Global Contacts
+            </Button>
+          </div>
           <motion.div
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
             transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
-            className="mx-auto mb-4 w-16 h-16 bg-gradient-to-br from-purple-500 to-blue-600 rounded-full flex items-center justify-center"
+            className="mx-auto mt-4 mb-4 w-16 h-16 bg-gradient-to-br from-purple-500 to-blue-600 rounded-full flex items-center justify-center"
           >
             <Sparkles className="w-8 h-8 text-white" />
           </motion.div>
@@ -169,13 +233,13 @@ const SessionCreator = ({ onSessionCreated }) => {
           </div>
 
           <motion.div
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
+            whileHover={{ scale: user ? 1.02 : 1 }}
+            whileTap={{ scale: user ? 0.98 : 1 }}
           >
             <Button
               onClick={handleCreateSession}
-              disabled={isCreating}
-              className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-semibold py-3 rounded-lg transition-all duration-300"
+              disabled={isCreating || !user}
+              className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-semibold py-3 rounded-lg transition-all duration-300 disabled:opacity-50"
             >
               {isCreating ? (
                 <motion.div
@@ -186,7 +250,7 @@ const SessionCreator = ({ onSessionCreated }) => {
               ) : (
                 <>
                   <Users className="w-5 h-5 mr-2" />
-                  Launch Flow
+                  {user ? 'Launch Flow' : 'Login to Launch Flow'}
                 </>
               )}
             </Button>
