@@ -5,30 +5,25 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Copy, Download, Users, Clock, Share2, FileText, Database, Tag, Link as LinkIcon, Lock, ArrowLeft, RefreshCw } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/supabaseClient';
+import { formatDistanceToNowStrict, parseISO, isPast } from 'date-fns';
 
-const SessionDashboard = ({ session, onBack, user }) => {
+const SessionDashboard = ({ session, onBack }) => {
   const [timeRemaining, setTimeRemaining] = useState('');
   const [contacts, setContacts] = useState([]);
   const [isExpired, setIsExpired] = useState(false);
   const [isLoadingContacts, setIsLoadingContacts] = useState(false);
 
   const calculateTimeRemaining = useCallback(() => {
-    const now = Date.now();
-    const expiresAtDate = new Date(session.expires_at).getTime();
-    const remaining = expiresAtDate - now;
-    
-    if (remaining <= 0) {
+    if (!session?.expires_at) return;
+    const expiresAtDate = parseISO(session.expires_at);
+    if (isPast(expiresAtDate)) {
       setIsExpired(true);
       setTimeRemaining('Expired');
       return;
     }
-
-    const hours = Math.floor(remaining / (1000 * 60 * 60));
-    const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
-    const seconds = Math.floor((remaining % (1000 * 60)) / 1000);
-    
-    setTimeRemaining(`${hours}h ${minutes}m ${seconds}s`);
-  }, [session.expires_at]);
+    setIsExpired(false);
+    setTimeRemaining(formatDistanceToNowStrict(expiresAtDate, { addSuffix: true }));
+  }, [session?.expires_at]);
 
   useEffect(() => {
     calculateTimeRemaining();
@@ -46,7 +41,12 @@ const SessionDashboard = ({ session, onBack, user }) => {
       .order('submitted_at', { ascending: false });
 
     if (error) {
-      toast({ title: "Error fetching contacts", description: error.message, variant: "destructive" });
+      console.error("Error fetching contacts:", error);
+      toast({
+        title: "Error Loading Contacts",
+        description: error.message,
+        variant: "destructive",
+      });
     } else {
       setContacts(data || []);
     }
@@ -55,19 +55,7 @@ const SessionDashboard = ({ session, onBack, user }) => {
 
   useEffect(() => {
     fetchContacts();
-    const contactsSubscription = supabase
-      .channel(`contacts-session-${session.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'contacts', filter: `session_id=eq.${session.id}` }, payload => {
-        console.log('Contact change received!', payload);
-        fetchContacts();
-      })
-      .subscribe();
-    
-    return () => {
-      supabase.removeChannel(contactsSubscription);
-    };
-
-  }, [session.id, fetchContacts]);
+  }, [fetchContacts]);
 
   const copySessionLink = () => {
     const link = `${window.location.origin}?session=${session.id}`;
@@ -80,18 +68,25 @@ const SessionDashboard = ({ session, onBack, user }) => {
 
   const downloadVCF = () => {
     if (contacts.length === 0) {
-      toast({ title: "No Contacts", description: "No contacts available to download", variant: "destructive" });
+      toast({
+        title: "No Contacts",
+        description: "No contacts available to download",
+        variant: "destructive"
+      });
       return;
     }
+
     let vcfContent = '';
     contacts.forEach(contact => {
-      vcfContent += 'BEGIN:VCARD\nVERSION:3.0\n';
+      vcfContent += 'BEGIN:VCARD\n';
+      vcfContent += 'VERSION:3.0\n';
       vcfContent += `FN:${contact.name}\n`;
-      if (contact.phone) vcfContent += `TEL:${contact.phone}\n`;
+      vcfContent += `TEL:${contact.phone}\n`;
       if (contact.email) vcfContent += `EMAIL:${contact.email}\n`;
       if (contact.company) vcfContent += `ORG:${contact.company}\n`;
       vcfContent += 'END:VCARD\n\n';
     });
+
     const blob = new Blob([vcfContent], { type: 'text/vcard' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -99,24 +94,35 @@ const SessionDashboard = ({ session, onBack, user }) => {
     a.download = `${session.name}_contacts.vcf`;
     a.click();
     URL.revokeObjectURL(url);
-    toast({ title: "VCF Downloaded! 📱", description: "Contact file has been downloaded" });
+
+    toast({
+      title: "VCF Downloaded! 📱",
+      description: "Contact file has been downloaded"
+    });
   };
 
   const downloadCSV = () => {
     if (contacts.length === 0) {
-      toast({ title: "No Contacts", description: "No contacts available to download", variant: "destructive" });
+      toast({
+        title: "No Contacts",
+        description: "No contacts available to download",
+        variant: "destructive"
+      });
       return;
     }
-    const headers = ['Name', 'Phone', 'Email', 'Company'];
+
+    const headers = ['Name', 'Phone', 'Email', 'Company', 'Submitted At'];
     const csvContent = [
       headers.join(','),
       ...contacts.map(contact => [
         contact.name,
-        contact.phone || '',
+        contact.phone,
         contact.email || '',
-        contact.company || ''
+        contact.company || '',
+        contact.submitted_at ? parseISO(contact.submitted_at).toLocaleString() : ''
       ].map(field => `"${String(field).replace(/"/g, '""')}"`).join(','))
     ].join('\n');
+
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -124,7 +130,11 @@ const SessionDashboard = ({ session, onBack, user }) => {
     a.download = `${session.name}_contacts.csv`;
     a.click();
     URL.revokeObjectURL(url);
-    toast({ title: "CSV Downloaded! 📊", description: "Contact spreadsheet has been downloaded" });
+
+    toast({
+      title: "CSV Downloaded! 📊",
+      description: "Contact spreadsheet has been downloaded"
+    });
   };
 
   return (
@@ -248,6 +258,7 @@ const SessionDashboard = ({ session, onBack, user }) => {
               <Database className="w-4 h-4 mr-2" />
               Download CSV
             </Button>
+            <p className="text-xs text-gray-500 text-center">Downloads available if contacts are present.</p>
           </CardContent>
         </Card>
 
@@ -257,23 +268,29 @@ const SessionDashboard = ({ session, onBack, user }) => {
               <CardTitle className="text-xl text-purple-300">Recent Contacts</CardTitle>
               <CardDescription className="text-gray-400">A quick view of the latest submissions.</CardDescription>
             </div>
-            <Button onClick={fetchContacts} variant="ghost" size="sm" className="text-purple-400 hover:text-purple-300 hover:bg-purple-500/10" disabled={isLoadingContacts}>
+            <Button variant="ghost" size="icon" onClick={fetchContacts} disabled={isLoadingContacts} className="text-purple-300 hover:text-purple-200 hover:bg-purple-500/10">
               <RefreshCw className={`w-4 h-4 ${isLoadingContacts ? 'animate-spin' : ''}`} />
             </Button>
           </CardHeader>
           <CardContent>
             {isLoadingContacts && contacts.length === 0 ? (
-              <p className="text-gray-400 text-center py-4">Loading contacts...</p>
+               <div className="flex justify-center items-center h-32">
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                  className="w-8 h-8 border-2 border-purple-400 border-t-transparent rounded-full"
+                />
+              </div>
             ) : contacts.length === 0 ? (
               <p className="text-gray-400 text-center py-4">No contacts submitted yet.</p>
             ) : (
               <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
-                {contacts.map((contact, index) => (
+                {contacts.slice(0,5).map((contact, index) => (
                   <motion.div
                     key={contact.id || index}
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: index * 0.05 }}
+                    transition={{ delay: index * 0.1 }}
                     className="p-3 bg-white/5 rounded-md border border-white/10"
                   >
                     <p className="font-medium text-white">{contact.name}</p>

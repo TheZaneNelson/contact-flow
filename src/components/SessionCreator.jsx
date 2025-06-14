@@ -9,26 +9,36 @@ import { Clock, Users, Share2, Sparkles, Tag, Link as LinkIcon, Lock } from 'luc
 import { toast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/supabaseClient';
 import { v4 as uuidv4 } from 'uuid';
+import { add } from 'date-fns';
 
-const SessionCreator = ({ onSessionCreated, user }) => {
+const SessionCreator = ({ onSessionCreated }) => {
   const [sessionName, setSessionName] = useState('');
-  const [duration, setDuration] = useState('');
+  const [duration, setDuration] = useState('30');
   const [durationUnit, setDurationUnit] = useState('minutes');
   const [contactNamePrefix, setContactNamePrefix] = useState('');
   const [whatsAppLink, setWhatsAppLink] = useState('');
   const [sessionPassword, setSessionPassword] = useState('');
   const [isCreating, setIsCreating] = useState(false);
 
-  const handleCreateSession = async () => {
-    if (!user) {
+  const getGlobalContacts = () => {
+    try {
+      const globalContactsJson = import.meta.env.VITE_GLOBAL_CONTACTS_JSON;
+      if (globalContactsJson) {
+        return JSON.parse(globalContactsJson);
+      }
+    } catch (error) {
+      console.error("Error parsing VITE_GLOBAL_CONTACTS_JSON:", error);
       toast({
-        title: "Authentication Required",
-        description: "Please log in to create a session.",
-        variant: "destructive"
+        title: "Global Contacts Error",
+        description: "There was an issue loading pre-defined global contacts.",
+        variant: "destructive",
       });
-      return;
     }
+    return [];
+  };
 
+
+  const handleCreateSession = async () => {
     if (!sessionName.trim() || !duration) {
       toast({
         title: "Missing Information",
@@ -40,78 +50,72 @@ const SessionCreator = ({ onSessionCreated, user }) => {
 
     setIsCreating(true);
     
-    const durationMs = parseInt(duration) * (durationUnit === 'minutes' ? 60000 : 3600000);
-    const sessionId = uuidv4();
-    const createdAt = new Date().toISOString();
-    const expiresAt = new Date(Date.now() + durationMs).toISOString();
+    const durationValue = parseInt(duration);
+    const now = new Date();
+    const expiresAtDate = add(now, { [durationUnit]: durationValue });
+    const durationMs = expiresAtDate.getTime() - now.getTime();
+
+    const newSessionId = uuidv4();
     
-    let globalContactsToAdd = [];
-    const { data: fetchedGlobalContacts, error: fetchGlobalError } = await supabase
-      .from('global_contacts')
-      .select('*');
-
-    if (fetchGlobalError) {
-      console.warn("Could not fetch global contacts:", fetchGlobalError.message);
-      toast({ title: "Global Contacts Warning", description: "Could not fetch global contacts to add to session.", variant: "default" });
-    } else {
-      globalContactsToAdd = fetchedGlobalContacts || [];
-    }
-
-
-    const sessionData = {
-      id: sessionId,
-      name: sessionName,
+    const sessionDataToSave = {
+      id: newSessionId,
+      name: sessionName.trim(),
       duration_ms: durationMs,
-      created_at: createdAt,
-      expires_at: expiresAt,
+      created_at: now.toISOString(),
+      expires_at: expiresAtDate.toISOString(),
       contact_name_prefix: contactNamePrefix.trim() || null,
       whatsapp_link: whatsAppLink.trim() || null,
       session_password: sessionPassword.trim() || null,
-      user_id: user.id
     };
-
-    const { data: newSession, error: sessionError } = await supabase
+    
+    const { data: savedSession, error: sessionError } = await supabase
       .from('sessions')
-      .insert([sessionData])
+      .insert(sessionDataToSave)
       .select()
       .single();
 
     if (sessionError) {
       setIsCreating(false);
+      console.error("Error creating session:", sessionError);
       toast({
-        title: "Session Creation Failed",
-        description: sessionError.message,
+        title: "Error Creating Session",
+        description: sessionError.message || "Could not save session to database.",
         variant: "destructive"
       });
       return;
     }
     
-    if (globalContactsToAdd.length > 0) {
-        const contactsToInsert = globalContactsToAdd.map(gc => ({
-            session_id: newSession.id,
-            name: gc.name,
-            phone: gc.phone,
-            email: gc.email || null,
-            company: gc.company || null,
-            submitted_at: new Date().toISOString()
-        }));
+    const globalContacts = getGlobalContacts();
+    if (globalContacts.length > 0) {
+      const contactsToInsert = globalContacts.map(contact => ({
+        session_id: savedSession.id,
+        name: contact.name,
+        phone: contact.phone,
+        email: contact.email || null,
+        company: contact.company || null,
+        submitted_at: new Date().toISOString(),
+      }));
 
-        const { error: contactsError } = await supabase
-            .from('contacts')
-            .insert(contactsToInsert);
+      const { error: contactsError } = await supabase
+        .from('contacts')
+        .insert(contactsToInsert);
 
-        if (contactsError) {
-            console.warn("Error adding global contacts to session:", contactsError.message);
-            toast({ title: "Global Contacts Warning", description: "Could not add all global contacts to this session.", variant: "default" });
-        }
+      if (contactsError) {
+        console.error("Error adding global contacts:", contactsError);
+        toast({
+          title: "Global Contacts Issue",
+          description: "Could not add all global contacts to the session.",
+          variant: "warning"
+        });
+      }
     }
 
 
     setIsCreating(false);
-    onSessionCreated(newSession);
+    onSessionCreated(savedSession);
     toast({
       title: "Session Created! 🎉",
-      description: "Your contact collection session is ready to share!"
+      description: "Your contact collection session is ready and saved!"
     });
   };
 
@@ -128,7 +132,7 @@ const SessionCreator = ({ onSessionCreated, user }) => {
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
             transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
-            className="mx-auto mt-4 mb-4 w-16 h-16 bg-gradient-to-br from-purple-500 to-blue-600 rounded-full flex items-center justify-center"
+            className="mx-auto mb-4 w-16 h-16 bg-gradient-to-br from-purple-500 to-blue-600 rounded-full flex items-center justify-center"
           >
             <Sparkles className="w-8 h-8 text-white" />
           </motion.div>
@@ -162,6 +166,7 @@ const SessionCreator = ({ onSessionCreated, user }) => {
               <Input
                 id="duration"
                 type="number"
+                min="1"
                 placeholder="30"
                 value={duration}
                 onChange={(e) => setDuration(e.target.value)}
@@ -228,13 +233,13 @@ const SessionCreator = ({ onSessionCreated, user }) => {
           </div>
 
           <motion.div
-            whileHover={{ scale: user ? 1.02 : 1 }}
-            whileTap={{ scale: user ? 0.98 : 1 }}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
           >
             <Button
               onClick={handleCreateSession}
-              disabled={isCreating || !user}
-              className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-semibold py-3 rounded-lg transition-all duration-300 disabled:opacity-50"
+              disabled={isCreating}
+              className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-semibold py-3 rounded-lg transition-all duration-300"
             >
               {isCreating ? (
                 <motion.div
@@ -245,7 +250,7 @@ const SessionCreator = ({ onSessionCreated, user }) => {
               ) : (
                 <>
                   <Users className="w-5 h-5 mr-2" />
-                  {user ? 'Launch Flow' : 'Login to Launch Flow'}
+                  Launch Flow
                 </>
               )}
             </Button>

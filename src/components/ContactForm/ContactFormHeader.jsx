@@ -21,7 +21,7 @@ const ContactFormHeader = ({ sessionName, isExpired, timeRemaining }) => {
         Share your contact information. Please include your country code with your phone number.
       </CardDescription>
       
-      {!isExpired && (
+      {!isExpired && timeRemaining && (
         <div className="flex items-center justify-center space-x-2 mt-4 p-2 bg-blue-500/20 rounded-lg border border-blue-500/30">
           <Clock className="w-4 h-4 text-blue-400" />
           <span className="text-blue-400 text-sm font-medium">
