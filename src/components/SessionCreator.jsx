@@ -5,12 +5,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Clock, Users, Share2, Sparkles, Tag, Link as LinkIcon, Lock, Settings } from 'lucide-react';
+import { Clock, Users, Share2, Sparkles, Tag, Link as LinkIcon, Lock } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/supabaseClient';
 import { v4 as uuidv4 } from 'uuid';
 
-const SessionCreator = ({ onSessionCreated, user, onManageGlobalContacts }) => {
+const SessionCreator = ({ onSessionCreated, user }) => {
   const [sessionName, setSessionName] = useState('');
   const [duration, setDuration] = useState('');
   const [durationUnit, setDurationUnit] = useState('minutes');
@@ -124,11 +124,6 @@ const SessionCreator = ({ onSessionCreated, user, onManageGlobalContacts }) => {
     >
       <Card className="glass-effect neon-glow border-purple-500/30">
         <CardHeader className="text-center">
-           <div className="flex justify-end w-full">
-            <Button onClick={onManageGlobalContacts} variant="outline" size="sm" className="border-cyan-400/30 text-cyan-300 hover:bg-cyan-500/20">
-              <Settings className="w-4 h-4 mr-2" /> Manage Global Contacts
-            </Button>
-          </div>
           <motion.div
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}

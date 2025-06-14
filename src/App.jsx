@@ -3,10 +3,9 @@ import { motion } from 'framer-motion';
 import SessionCreator from '@/components/SessionCreator';
 import SessionDashboard from '@/components/SessionDashboard';
 import ContactForm from '@/components/ContactForm';
-import GlobalContactsManager from '@/components/GlobalContactsManager';
 import AuthForm from '@/components/AuthForm';
 import { Toaster } from '@/components/ui/toaster';
-import { Users, Settings, LogOut, UserCircle } from 'lucide-react';
+import { Users, LogOut, UserCircle } from 'lucide-react';
 import 'react-phone-number-input/style.css'
 import { supabase } from '@/lib/supabaseClient'; 
 import { Button } from '@/components/ui/button';
@@ -77,10 +76,6 @@ function App() {
     setCurrentView('creator');
     window.history.pushState({}, '', window.location.pathname);
   };
-
-  const handleManageGlobalContacts = () => {
-    setCurrentView('global-contacts');
-  };
   
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
@@ -121,13 +116,11 @@ function App() {
           return null;
         }
         return <ContactForm sessionId={sessionIdFromUrl} />;
-      case 'global-contacts':
-        return <GlobalContactsManager onBack={handleBackToCreator} />;
       default: 
         if (!user) {
           return <AuthForm onAuthSuccess={() => { setShowAuthForm(false); setCurrentView('creator'); }} />;
         }
-        return <SessionCreator onSessionCreated={handleSessionCreated} user={user} onManageGlobalContacts={handleManageGlobalContacts} />;
+        return <SessionCreator onSessionCreated={handleSessionCreated} user={user} />;
     }
   };
 

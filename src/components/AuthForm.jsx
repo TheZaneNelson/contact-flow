@@ -29,10 +29,15 @@ const AuthForm = ({ onAuthSuccess }) => {
 
     try {
       let response;
+      const options = {};
+      if (!isLogin) {
+        options.emailRedirectTo = 'https://contactflow.vercel.app/';
+      }
+
       if (isLogin) {
         response = await supabase.auth.signInWithPassword({ email, password });
       } else {
-        response = await supabase.auth.signUp({ email, password });
+        response = await supabase.auth.signUp({ email, password, options });
       }
 
       const { error, data } = response;
@@ -44,7 +49,7 @@ const AuthForm = ({ onAuthSuccess }) => {
       if (data.user) {
         toast({ title: "Success!", description: isLogin ? "Logged in successfully." : "Signed up successfully! Please check your email to verify your account." });
         if (onAuthSuccess) onAuthSuccess(data.user);
-      } else if (!isLogin && data && !data.user) {
+      } else if (!isLogin && data && !data.user && data.session === null) {
          toast({ title: "Verification Required", description: "Please check your email to verify your account before logging in." });
       }
 
