@@ -6,12 +6,14 @@ import { Copy, Download, Users, Clock, Share2, FileText, Database, Tag, Link as 
 import { toast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/supabaseClient';
 import { formatDistanceToNowStrict, parseISO, isPast } from 'date-fns';
+import { useNavigate } from 'react-router-dom';
 
 const SessionDashboard = ({ session, onBack }) => {
   const [timeRemaining, setTimeRemaining] = useState('');
   const [contacts, setContacts] = useState([]);
   const [isExpired, setIsExpired] = useState(false);
   const [isLoadingContacts, setIsLoadingContacts] = useState(false);
+  const navigate = useNavigate();
 
   const calculateTimeRemaining = useCallback(() => {
     if (!session?.expires_at) return;
@@ -54,11 +56,20 @@ const SessionDashboard = ({ session, onBack }) => {
   }, [session?.id]);
 
   useEffect(() => {
-    fetchContacts();
-  }, [fetchContacts]);
+    if (session?.id) {
+      fetchContacts();
+    } else {
+       toast({ title: "Session Error", description: "Session data is not available.", variant: "destructive" });
+       if (onBack) onBack(); else navigate('/dashboard');
+    }
+  }, [fetchContacts, session, onBack, navigate]);
 
   const copySessionLink = () => {
-    const link = `${window.location.origin}?session=${session.id}`;
+    if (!session?.id) {
+      toast({ title: "Error", description: "Session ID not found.", variant: "destructive" });
+      return;
+    }
+    const link = `${window.location.origin}/contact/${session.id}`;
     navigator.clipboard.writeText(link);
     toast({
       title: "Link Copied! 📋",
@@ -136,6 +147,15 @@ const SessionDashboard = ({ session, onBack }) => {
       description: "Contact spreadsheet has been downloaded"
     });
   };
+  
+  if (!session) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p className="text-red-400">Session data not available. Redirecting...</p>
+      </div>
+    );
+  }
+
 
   return (
     <motion.div
@@ -150,7 +170,7 @@ const SessionDashboard = ({ session, onBack }) => {
           variant="outline"
           className="border-purple-400/30 text-purple-300 hover:bg-purple-500/20 flex items-center"
         >
-          <ArrowLeft className="w-4 h-4 mr-2" /> Back to Creator
+          <ArrowLeft className="w-4 h-4 mr-2" /> Back to My Flows
         </Button>
         
         <motion.div

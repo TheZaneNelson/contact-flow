@@ -5,13 +5,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Clock, Users, Share2, Sparkles, Tag, Link as LinkIcon, Lock } from 'lucide-react';
+import { Clock, Users, Share2, Sparkles, Tag, Link as LinkIcon, Lock, ArrowLeft } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/supabaseClient';
 import { v4 as uuidv4 } from 'uuid';
 import { add } from 'date-fns';
+import { useNavigate } from 'react-router-dom';
 
-const SessionCreator = ({ onSessionCreated }) => {
+const SessionCreator = ({ onSessionCreated, userId }) => {
   const [sessionName, setSessionName] = useState('');
   const [duration, setDuration] = useState('30');
   const [durationUnit, setDurationUnit] = useState('minutes');
@@ -19,6 +20,7 @@ const SessionCreator = ({ onSessionCreated }) => {
   const [whatsAppLink, setWhatsAppLink] = useState('');
   const [sessionPassword, setSessionPassword] = useState('');
   const [isCreating, setIsCreating] = useState(false);
+  const navigate = useNavigate();
 
   const getGlobalContacts = () => {
     try {
@@ -47,6 +49,15 @@ const SessionCreator = ({ onSessionCreated }) => {
       });
       return;
     }
+    if (!userId) {
+      toast({
+        title: "Authentication Error",
+        description: "User not identified. Please log in again.",
+        variant: "destructive"
+      });
+      navigate('/auth');
+      return;
+    }
 
     setIsCreating(true);
     
@@ -59,6 +70,7 @@ const SessionCreator = ({ onSessionCreated }) => {
     
     const sessionDataToSave = {
       id: newSessionId,
+      user_id: userId,
       name: sessionName.trim(),
       duration_ms: durationMs,
       created_at: now.toISOString(),
@@ -110,7 +122,6 @@ const SessionCreator = ({ onSessionCreated }) => {
       }
     }
 
-
     setIsCreating(false);
     onSessionCreated(savedSession);
     toast({
@@ -126,6 +137,13 @@ const SessionCreator = ({ onSessionCreated }) => {
       transition={{ duration: 0.6 }}
       className="max-w-lg mx-auto"
     >
+      <Button
+        onClick={() => navigate('/dashboard')}
+        variant="outline"
+        className="mb-6 border-purple-400/30 text-purple-300 hover:bg-purple-500/20 flex items-center"
+      >
+        <ArrowLeft className="w-4 h-4 mr-2" /> Back to Dashboard
+      </Button>
       <Card className="glass-effect neon-glow border-purple-500/30">
         <CardHeader className="text-center">
           <motion.div
