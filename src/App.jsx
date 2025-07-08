@@ -13,17 +13,6 @@ import { Button } from '@/components/ui/button';
 import 'react-phone-number-input/style.css';
 import { Analytics } from '@vercel/analytics/react';
 
-export default function Layout({ children }) {
-  return (
-    <html lang="en">
-      <body>
-        {children}
-        <Analytics />
-      </body>
-    </html>
-  );
-}
-
 
 function App() {
   const [session, setSession] = useState(null);
@@ -68,6 +57,7 @@ function App() {
     <Router>
       <div className="min-h-screen bg-background text-foreground">
         <AppContent authSession={session} />
+        <Analytics />
         <Toaster />
       </div>
     </Router>
