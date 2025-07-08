@@ -11,6 +11,7 @@ import { Users, LogOut, Home, LogIn } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { Button } from '@/components/ui/button';
 import 'react-phone-number-input/style.css';
+import { Analytics } from "@vercel/analytics/react"
 
 function App() {
   const [session, setSession] = useState(null);

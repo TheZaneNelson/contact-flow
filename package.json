@@ -4,7 +4,7 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
-    "dev": "vite --port 1570",
+    "dev": "vite --port 1075",
     "build": "vite build",
     "preview": "vite preview"
   },

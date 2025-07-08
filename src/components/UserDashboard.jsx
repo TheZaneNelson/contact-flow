@@ -66,20 +66,38 @@ const UserDashboard = () => {
   };
 
   const handleDeleteSession = async (sessionId) => {
-    setDeletingSessionId(sessionId);
+  setDeletingSessionId(sessionId);
+  try {
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      throw new Error('User not authenticated');
+    }
+
     const { error } = await supabase
       .from('sessions')
       .delete()
-      .eq('id', sessionId);
-
+      .eq('id', sessionId)
+      .eq('user_id', user.id); // Ensure only the user's session is deleted
     if (error) {
-      toast({ title: 'Error Deleting Session', description: error.message, variant: 'destructive' });
-    } else {
-      toast({ title: 'Session Deleted', description: 'The session has been successfully deleted.' });
-      setSessions(prevSessions => prevSessions.filter(s => s.id !== sessionId));
+      throw error;
     }
+
+    toast({
+      title: 'Session Deleted',
+      description: 'The session and its contacts have been successfully deleted.',
+    });
+    setSessions((prevSessions) => prevSessions.filter((s) => s.id !== sessionId));
+  } catch (error) {
+    console.error('Error deleting session:', error);
+    toast({
+      title: 'Error Deleting Session',
+      description: error.message || 'Failed to delete session.',
+      variant: 'destructive',
+    });
+  } finally {
     setDeletingSessionId(null);
-  };
+  }
+};
 
   return (
     <motion.div
