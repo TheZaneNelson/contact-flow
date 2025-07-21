@@ -2,7 +2,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { CheckCircle } from 'lucide-react';
+import { CheckCircle, UserPlus } from 'lucide-react';
 
 const ContactFormSuccess = ({ sessionName, onAddAnother }) => {
   return (
@@ -23,17 +23,24 @@ const ContactFormSuccess = ({ sessionName, onAddAnother }) => {
               <CheckCircle className="w-8 h-8 text-white" />
             </motion.div>
             <h2 className="text-2xl font-bold text-green-400 mb-2">Success!</h2>
-            <p className="text-gray-300">Your contact has been added to {sessionName || "the session"}.</p>
-            <Button onClick={onAddAnother} className="mt-6 gradient-bg text-white">
-              Add Another Contact
-            </Button>
-            <Button 
+            <p className="text-gray-300 mb-6">Your contact has been added to {sessionName || "the session"}.</p>
+            
+            <div className="flex flex-col space-y-3">
+              <Button 
+                onClick={onAddAnother} 
+                className="gradient-bg text-white"
+              >
+                Add Another Contact
+              </Button>
+              
+              <Button 
                 variant="outline" 
                 className="text-green-400 border-green-400 hover:bg-green-400/10"
               >
                 <UserPlus className="w-4 h-4 mr-2" />
                 Create Account
               </Button>
+            </div>
           </CardContent>
         </Card>
       </motion.div>
