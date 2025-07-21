@@ -5,6 +5,11 @@ import { Card, CardContent } from '@/components/ui/card';
 import { CheckCircle, UserPlus } from 'lucide-react';
 
 const ContactFormSuccess = ({ sessionName, onAddAnother }) => {
+  const handleCreateAccount = () => {
+    // Redirect to ContactFlow website
+    window.location.href = 'https://contactflow.vercel.app';
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
       <motion.div
@@ -36,6 +41,7 @@ const ContactFormSuccess = ({ sessionName, onAddAnother }) => {
               <Button 
                 variant="outline" 
                 className="text-green-400 border-green-400 hover:bg-green-400/10"
+                onClick={handleCreateAccount}
               >
                 <UserPlus className="w-4 h-4 mr-2" />
                 Create Account
