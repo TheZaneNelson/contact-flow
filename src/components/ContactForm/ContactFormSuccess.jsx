@@ -27,6 +27,13 @@ const ContactFormSuccess = ({ sessionName, onAddAnother }) => {
             <Button onClick={onAddAnother} className="mt-6 gradient-bg text-white">
               Add Another Contact
             </Button>
+            <Button 
+                variant="outline" 
+                className="text-green-400 border-green-400 hover:bg-green-400/10"
+              >
+                <UserPlus className="w-4 h-4 mr-2" />
+                Create Account
+              </Button>
           </CardContent>
         </Card>
       </motion.div>
