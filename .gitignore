@@ -3,3 +3,4 @@ dist
 .vscode
 .env
 tutorial.txt
+.codesandbox/tasks.json
